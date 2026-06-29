@@ -57,6 +57,14 @@ interface GenerateResult {
   word_count: number;
   processing_time_ms: number;
   steps: { name: string; output: string }[];
+  ai_score: number;
+  score_breakdown: { label: string; value: string }[];
+}
+
+function scoreColor(score: number) {
+  if (score <= 25) return { text: "#34d399", bg: "rgba(16,185,129,0.08)", border: "rgba(16,185,129,0.25)" };
+  if (score <= 50) return { text: "#fbbf24", bg: "rgba(245,158,11,0.08)", border: "rgba(245,158,11,0.25)" };
+  return { text: "#f87171", bg: "rgba(239,68,68,0.08)", border: "rgba(239,68,68,0.25)" };
 }
 
 // ── Lightweight markdown renderer ─────────────────────────────────────────────
@@ -111,7 +119,7 @@ function SelectField({ label, value, onChange, options }: {
 function ProgressSteps({ step }: { step: Step }) {
   const steps = [
     { id: "generating", label: "Generating Article", sub: "Claude AI is researching and writing..." },
-    { id: "humanizing", label: "Humanizing Content", sub: "EN→ZH→JA→FI→EN pipeline running..." },
+    { id: "humanizing", label: "Humanizing Content", sub: "Multi-pass anti-detector rewrite running..." },
     { id: "done", label: "Complete", sub: "Your article is ready" },
   ];
   const activeIdx = step === "generating" ? 0 : step === "humanizing" ? 1 : step === "done" ? 2 : -1;
@@ -237,7 +245,7 @@ export default function AnchorApp() {
           <div className="flex flex-col gap-2">
             {[
               { icon: <ZapIcon className="w-3.5 h-3.5" />, label: "AI Article Generation" },
-              { icon: <ShieldIcon className="w-3.5 h-3.5" />, label: "0% AI Detection" },
+              { icon: <ShieldIcon className="w-3.5 h-3.5" />, label: "Anti-detector humanizer" },
               { icon: <ArticleIcon className="w-3.5 h-3.5" />, label: "5 Writing Styles" },
             ].map((item) => (
               <div key={item.label} className="flex items-center gap-2.5" style={{ color: "#94a3b8" }}>
@@ -255,8 +263,8 @@ export default function AnchorApp() {
             {[
               { n: "1", label: "Enter keyword", sub: "Your topic or target keyword" },
               { n: "2", label: "Add references", sub: "Paste articles for context" },
-              { n: "3", label: "Generate", sub: "Claude writes the article" },
-              { n: "4", label: "Humanize", sub: "EN→ZH→JA→FI→EN pipeline" },
+              { n: "3", label: "Generate", sub: "AI writes the researched draft" },
+              { n: "4", label: "Humanize", sub: "Multi-pass anti-detector rewrite" },
             ].map((item) => (
               <div key={item.n} className="flex gap-2.5">
                 <div className="w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5 border" style={{ background: "#1a2236", borderColor: "#1e2d45" }}>
@@ -276,14 +284,14 @@ export default function AnchorApp() {
           <div className="rounded-lg p-3 border" style={{ background: "#0d1526", borderColor: "#1e2d45" }}>
             <p className="text-[10px] uppercase tracking-wider mb-1.5" style={{ color: "#64748b" }}>Humanization Pipeline</p>
             <div className="flex items-center gap-1 flex-wrap">
-              {["EN", "ZH", "JA", "FI", "EN"].map((lang, i, arr) => (
+              {["Swap", "Burst", "Voice", "Score"].map((lang, i, arr) => (
                 <span key={`${lang}-${i}`} className="flex items-center gap-1">
                   <span className="text-[11px] font-mono font-bold" style={{ color: "#60a5fa" }}>{lang}</span>
                   {i < arr.length - 1 && <span className="text-[10px]" style={{ color: "#334155" }}>→</span>}
                 </span>
               ))}
             </div>
-            <p className="text-[10px] mt-1.5" style={{ color: "#475569" }}>Passes GPTZero, Turnitin & more</p>
+            <p className="text-[10px] mt-1.5" style={{ color: "#475569" }}>Perplexity + burstiness rewriting</p>
           </div>
         </div>
       </aside>
@@ -446,7 +454,7 @@ export default function AnchorApp() {
                       <span>·</span>
                       <span>{Math.ceil(result.word_count / 200)} min read</span>
                       <span>·</span>
-                      <span className="font-medium" style={{ color: "#34d399" }}>0% AI Detected</span>
+                      <span className="font-medium" style={{ color: scoreColor(result.ai_score).text }}>~{result.ai_score}% AI estimate</span>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -476,19 +484,31 @@ export default function AnchorApp() {
                   </div>
                 </div>
 
-                {/* Badges */}
-                <div className="px-6 pt-4 flex items-center gap-3 flex-wrap">
-                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-full border" style={{ background: "rgba(16,185,129,0.08)", borderColor: "rgba(16,185,129,0.25)" }}>
-                    <ShieldIcon className="w-3.5 h-3.5" style={{ color: "#34d399" }} />
-                    <span className="text-xs font-semibold" style={{ color: "#34d399" }}>0% AI Detection</span>
+                {/* Score panel */}
+                <div className="px-6 pt-4">
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full border" style={{ background: scoreColor(result.ai_score).bg, borderColor: scoreColor(result.ai_score).border }}>
+                      <ShieldIcon className="w-3.5 h-3.5" style={{ color: scoreColor(result.ai_score).text }} />
+                      <span className="text-xs font-semibold" style={{ color: scoreColor(result.ai_score).text }}>
+                        ~{result.ai_score}% AI · {100 - result.ai_score}% human (estimated)
+                      </span>
+                    </div>
+                    <div className="px-3 py-1.5 rounded-full border" style={{ background: "#1a2236", borderColor: "#1e2d45" }}>
+                      <span className="text-xs" style={{ color: "#64748b" }}>{Math.round(result.processing_time_ms / 1000)}s total</span>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-full border" style={{ background: "rgba(37,99,235,0.08)", borderColor: "rgba(37,99,235,0.25)" }}>
-                    <ZapIcon className="w-3.5 h-3.5" style={{ color: "#60a5fa" }} />
-                    <span className="text-xs" style={{ color: "#60a5fa" }}>Humanization pipeline complete</span>
+                  {/* Honest breakdown */}
+                  <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {result.score_breakdown.map((b) => (
+                      <div key={b.label} className="rounded-lg px-3 py-2 border" style={{ background: "#0d1526", borderColor: "#1e2d45" }}>
+                        <p className="text-[10px] uppercase tracking-wider" style={{ color: "#64748b" }}>{b.label}</p>
+                        <p className="text-xs font-medium mt-0.5" style={{ color: "#cbd5e1" }}>{b.value}</p>
+                      </div>
+                    ))}
                   </div>
-                  <div className="px-3 py-1.5 rounded-full border" style={{ background: "#1a2236", borderColor: "#1e2d45" }}>
-                    <span className="text-xs" style={{ color: "#64748b" }}>{Math.round(result.processing_time_ms / 1000)}s total</span>
-                  </div>
+                  <p className="text-[11px] mt-2 leading-relaxed" style={{ color: "#475569" }}>
+                    This is Anchor&apos;s own estimate based on sentence variety, word choice, and tells. Always verify with your target detector (GPTZero, Originality.ai) before publishing — no tool can guarantee a score.
+                  </p>
                 </div>
 
                 {/* Article */}
