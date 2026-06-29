@@ -35,6 +35,8 @@ export async function POST(req: NextRequest) {
       steps: humanized.steps,
       processing_time_ms: humanized.processing_time_ms,
       word_count: humanized.result.split(/\s+/).filter(Boolean).length,
+      ai_score: humanized.ai_score,
+      score_breakdown: humanized.score_breakdown,
     });
   } catch (err: unknown) {
     console.error("Generate error:", err);
