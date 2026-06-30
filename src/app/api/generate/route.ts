@@ -36,6 +36,7 @@ export async function POST(req: NextRequest) {
       processing_time_ms: humanized.processing_time_ms,
       word_count: humanized.result.split(/\s+/).filter(Boolean).length,
       ai_score: humanized.ai_score,
+      detector: humanized.detector,
       score_breakdown: humanized.score_breakdown,
     });
   } catch (err: unknown) {
