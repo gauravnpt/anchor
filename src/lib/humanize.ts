@@ -14,7 +14,28 @@ export interface HumanizeResult {
   steps: HumanizeStep[];
   processing_time_ms: number;
   ai_score: number;        // 0-100, lower = more human
+  detector: string;        // which scorer produced ai_score
   score_breakdown: { label: string; value: string }[];
+}
+
+// ── Real AI detector (Sapling) — drives the loop when SAPLING_API_KEY is set ────
+// Returns 0-100 (higher = more AI), or null if unavailable/errored.
+async function detectAIScore(text: string): Promise<number | null> {
+  const key = process.env.SAPLING_API_KEY;
+  if (!key) return null;
+  try {
+    const res = await fetch("https://api.sapling.ai/api/v1/aidetect", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key, text: text.slice(0, 50000), sent_scores: false }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (typeof data.score !== "number") return null;
+    return Math.round(data.score * 100);
+  } catch {
+    return null;
+  }
 }
 
 // ── AI "tell" word lists (from the humanization playbook) ──────────────────────
@@ -221,16 +242,21 @@ export async function humanizeText(text: string): Promise<HumanizeResult> {
 
   // Final lexical cleanup — catch any tell-words the model reintroduced
   let current = lexicalPrePass(pass2).output;
-  let { score, breakdown } = scoreAILikelihood(current);
 
-  // Iterative hardening: keep rewriting until the score is low or we hit the cap.
-  // Each round targets the specific weak signals the scorer flags.
-  // Tunable via env so you can trade quality vs. token budget without code changes.
-  // More rounds = lower score but more tokens used (matters on Groq's free daily cap).
-  const TARGET = Number(process.env.HUMANIZE_TARGET_SCORE ?? 14);  // stop once score <= this
-  const MAX_ROUNDS = Number(process.env.HUMANIZE_MAX_ROUNDS ?? 2); // extra hardening passes
+  // Try the REAL detector first; fall back to the heuristic if no key / it errors.
+  const realStart = await detectAIScore(current);
+  const usingReal = realStart !== null;
+  const detectorName = usingReal ? "Sapling AI detector" : "Anchor heuristic (estimate)";
+
+  let heur = scoreAILikelihood(current);
   let best = current;
-  let bestScore = score;
+  let bestScore = usingReal ? (realStart as number) : heur.score;
+  let bestBreakdown = heur.breakdown;
+
+  // Iterative hardening: rewrite until the score is low or we hit the cap.
+  // With a real detector this genuinely drives toward "undetectable"; tokens permitting.
+  const TARGET = Number(process.env.HUMANIZE_TARGET_SCORE ?? (usingReal ? 10 : 14));
+  const MAX_ROUNDS = Number(process.env.HUMANIZE_MAX_ROUNDS ?? (usingReal ? 4 : 2));
 
   for (let round = 1; round <= MAX_ROUNDS && bestScore > TARGET; round++) {
     const weak = scoreAILikelihood(best);
@@ -242,7 +268,7 @@ export async function humanizeText(text: string): Promise<HumanizeResult> {
     const harder = await callGroq(
       SMART,
       HUMANIZE_SYSTEM,
-      `This text still reads slightly AI-generated (detector weak spots: ${focus}).
+      `This text still reads slightly AI-generated (current detector score: ${bestScore}% AI; weak spots: ${focus}).
 Rewrite it AGAIN and push harder:
 - Make sentence lengths swing wildly — put a 3-word sentence right next to a 30-word one.
 - Delete every remaining tell-word and every "X, Y, and Z" three-item list.
@@ -253,22 +279,29 @@ Output ONLY the rewritten article:\n\n${best}`,
       1.0
     );
     const cleaned = lexicalPrePass(harder).output;
-    const res = scoreAILikelihood(cleaned);
-    steps.push({ name: `Hardening round ${round} → ${res.score}% est.`, output: cleaned });
+
+    const realRound = usingReal ? await detectAIScore(cleaned) : null;
+    heur = scoreAILikelihood(cleaned);
+    const roundScore = realRound !== null ? realRound : heur.score;
+    steps.push({ name: `Hardening round ${round} → ${roundScore}% AI`, output: cleaned });
 
     // keep whichever version scores best (rewrites occasionally regress)
-    if (res.score < bestScore) {
+    if (roundScore < bestScore) {
       best = cleaned;
-      bestScore = res.score;
-      breakdown = res.breakdown;
+      bestScore = roundScore;
+      bestBreakdown = heur.breakdown;
     }
   }
+
+  // Surface the detector source as the first breakdown row
+  const breakdown = [{ label: "Scored by", value: detectorName }, ...bestBreakdown];
 
   return {
     result: best,
     steps,
     processing_time_ms: Date.now() - start,
     ai_score: bestScore,
+    detector: detectorName,
     score_breakdown: breakdown,
   };
 }
