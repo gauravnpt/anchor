@@ -58,6 +58,7 @@ interface GenerateResult {
   processing_time_ms: number;
   steps: { name: string; output: string }[];
   ai_score: number;
+  detector?: string;
   score_breakdown: { label: string; value: string }[];
 }
 
@@ -507,7 +508,9 @@ export default function AnchorApp() {
                     ))}
                   </div>
                   <p className="text-[11px] mt-2 leading-relaxed" style={{ color: "#475569" }}>
-                    This is Anchor&apos;s own estimate based on sentence variety, word choice, and tells. Always verify with your target detector (GPTZero, Originality.ai) before publishing — no tool can guarantee a score.
+                    {result.detector?.includes("Sapling")
+                      ? "Scored by a real AI detector (Sapling) and rewritten until it passed. Different detectors disagree — always spot-check with your target detector (GPTZero, Originality.ai) before publishing. No tool guarantees a score."
+                      : "This is Anchor's own estimate based on sentence variety, word choice, and tells — not a real detector. Add a SAPLING_API_KEY to score against a real detector. Always verify with your target detector before publishing."}
                   </p>
                 </div>
 
