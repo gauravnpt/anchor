@@ -7,7 +7,7 @@ export const maxDuration = 300;
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { keyword, references, length, style, audience, tone } = body;
+    const { keyword, references, length, style, audience, tone, outline } = body;
 
     if (!keyword?.trim()) {
       return NextResponse.json({ error: "Keyword is required" }, { status: 400 });
@@ -20,6 +20,7 @@ export async function POST(req: NextRequest) {
       style: style || "blog",
       audience: audience || "general readers",
       tone: tone || "professional",
+      outline: outline || "",
     };
 
     // Step 1: Generate raw article with Claude
