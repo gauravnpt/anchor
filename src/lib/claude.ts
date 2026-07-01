@@ -3,13 +3,15 @@
 export interface ArticleOptions {
   keyword: string;
   references: string[];
-  length: "short" | "medium" | "long";
+  length: "mini" | "short" | "medium" | "long";
   style: "blog" | "news" | "thought-leadership" | "how-to" | "listicle";
   audience: string;
   tone: "professional" | "casual" | "authoritative" | "conversational";
+  outline?: string; // optional table of contents / heading guide from the user
 }
 
 const LENGTH_WORDS = {
+  mini: "450-550",
   short: "800-1000",
   medium: "1500-2000",
   long: "2500-3500",
@@ -54,24 +56,33 @@ async function callGroq(systemPrompt: string, userMessage: string, maxTokens = 8
 }
 
 export async function generateArticle(options: ArticleOptions): Promise<string> {
-  const { keyword, references, length, style, audience, tone } = options;
+  const { keyword, references, length, style, audience, tone, outline } = options;
 
   const refsBlock =
     references.length > 0
       ? `\n\nREFERENCE MATERIAL (use these for facts, context, and insights):\n${references.map((r, i) => `[REF ${i + 1}]:\n${r}`).join("\n\n---\n\n")}`
       : "";
 
+  // When the user supplies a table of contents / heading guide, follow it exactly.
+  const outlineBlock = outline?.trim()
+    ? `\n\nREQUIRED STRUCTURE — follow this outline exactly. Each line is a heading. Use "##" for main (H2) sections and "###" for sub (H3) sections. Lines already prefixed with ## or ### tell you the level; otherwise treat top-level items as H2 and indented items as H3. Cover every heading, in this order, and do not add unrelated sections:\n${outline.trim()}`
+    : "";
+
+  const headingRule = outline?.trim()
+    ? "- Use the EXACT headings from the required structure above, matching H2 (##) and H3 (###) levels as specified."
+    : "- Use proper subheadings (## for H2, ### for H3) to structure the content";
+
   const userMessage = `Write a comprehensive, well-researched ${STYLE_DESC[style]} about: "${keyword}"
 
 TARGET AUDIENCE: ${audience || "general readers"}
 TONE: ${tone}
-LENGTH: ${LENGTH_WORDS[length]} words
+LENGTH: ${LENGTH_WORDS[length]} words${outlineBlock}
 ${refsBlock}
 
 WRITING REQUIREMENTS:
 - Write in a natural, human voice — varied sentence lengths, occasional colloquialisms where appropriate
 - Include a compelling headline (H1)
-- Use proper subheadings (H2, H3) to structure the content
+${headingRule}
 - Include relevant statistics, examples, and expert insights
 - Write flowing paragraphs — avoid bullet-point overuse
 - Add a strong introduction that hooks the reader
