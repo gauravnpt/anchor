@@ -162,6 +162,7 @@ export default function AnchorApp() {
   const [style, setStyle] = useState("blog");
   const [audience, setAudience] = useState("");
   const [tone, setTone] = useState("professional");
+  const [outline, setOutline] = useState("");
   const [step, setStep] = useState<Step>("idle");
   const [result, setResult] = useState<GenerateResult | null>(null);
   const [error, setError] = useState("");
@@ -184,7 +185,7 @@ export default function AnchorApp() {
       const res = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ keyword, references: refs, length, style, audience, tone }),
+        body: JSON.stringify({ keyword, references: refs, length, style, audience, tone, outline }),
       });
 
       // Switch UI to humanizing while server processes
@@ -203,7 +204,7 @@ export default function AnchorApp() {
       setError(e instanceof Error ? e.message : "Something went wrong");
       setStep("error");
     }
-  }, [keyword, references, length, style, audience, tone]);
+  }, [keyword, references, length, style, audience, tone, outline]);
 
   const copyToClipboard = () => {
     if (!result) return;
@@ -340,6 +341,7 @@ export default function AnchorApp() {
                 {/* Options grid */}
                 <div className="grid grid-cols-2 gap-4 mb-5">
                   <SelectField label="Article Length" value={length} onChange={setLength} options={[
+                    { value: "mini", label: "Mini (~500 words)" },
                     { value: "short", label: "Short (800–1000 words)" },
                     { value: "medium", label: "Medium (1500–2000 words)" },
                     { value: "long", label: "Long (2500–3500 words)" },
@@ -368,6 +370,32 @@ export default function AnchorApp() {
                       className="border rounded-lg px-3 py-2.5 text-sm placeholder-slate-600 focus:outline-none transition-colors"
                     />
                   </div>
+                </div>
+
+                {/* Table of Contents / outline */}
+                <div className="flex flex-col gap-1.5 mb-5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-medium uppercase tracking-wider" style={{ color: "#94a3b8" }}>Table of Contents / Headings (optional)</label>
+                    <button
+                      type="button"
+                      onClick={() => setOutline("## Introduction\n## What is {topic}\n### Key benefits\n### How it works\n## Best practices\n## Conclusion")}
+                      className="text-xs transition-colors hover:opacity-80"
+                      style={{ color: "#60a5fa" }}
+                    >
+                      Insert example
+                    </button>
+                  </div>
+                  <textarea
+                    value={outline}
+                    onChange={(e) => setOutline(e.target.value)}
+                    placeholder={"Guide the structure. One heading per line.\nUse ## for main sections (H2) and ### for sub-sections (H3). e.g.\n\n## What is it\n### Key benefits\n### Common mistakes\n## How to get started\n## Conclusion"}
+                    rows={5}
+                    style={{ background: "#0d1526", borderColor: "#1e2d45", color: "#e2e8f0" }}
+                    className="border rounded-lg px-3 py-2.5 text-sm placeholder-slate-600 focus:outline-none transition-colors resize-none font-mono"
+                  />
+                  <p className="text-[11px] leading-relaxed" style={{ color: "#475569" }}>
+                    Leave blank to let Anchor decide the structure. When filled, the article follows your headings exactly — <span style={{ color: "#64748b" }}>##</span> = H2, <span style={{ color: "#64748b" }}>###</span> = H3.
+                  </p>
                 </div>
 
                 {/* References */}
